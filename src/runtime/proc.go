@@ -2752,6 +2752,10 @@ top:
 	// blocked thread (e.g. it has already returned from netpoll, but does
 	// not set lastpoll yet), this thread will do blocking netpoll below
 	// anyway.
+	/* 
+	查看本地队列和全局队列之后，窃取队列之前，立刻轮询网络
+	意味着，调度器的角度来看，本地队列和全局队列是优先于网络轮询的
+	 */
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
 		if list := netpoll(0); !list.empty() { // non-blocking
 			gp := list.pop()
@@ -2944,6 +2948,11 @@ top:
 			// When using fake time, just poll.
 			delay = 0
 		}
+		/* 
+		阻塞轮询，意味着所属线程会阻塞轮询。
+		也就是线程在暂时没有任务可调度时，会休眠一直等待？新出来的任务，在 netpoller 未完成之前，永远不会再调度此线程执行？
+		需要验证
+		 */
 		list := netpoll(delay) // block until new work is available
 		atomic.Store64(&sched.pollUntil, 0)
 		atomic.Store64(&sched.lastpoll, uint64(nanotime()))

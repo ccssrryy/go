@@ -104,6 +104,21 @@ func netpollBreak() {
 // delay < 0: blocks indefinitely
 // delay == 0: does not block, just polls
 // delay > 0: block for up to that many nanoseconds
+// netpoller 最终调用的核心方法
+
+/* 
+总共有五处调用
+其中四处非阻塞调用，参数为 0，轮询后将 runnable 的 goroutine 放入队列
+startTheWorldWithSema, findrunnable, pollWork，sysmon
+一处 findrunnable 中的阻塞调用， [list := netpoll(delay)](https://github.com/ccssrryy/go/blob/cd6e0d7cad147b686f9f8066b651b0079e6f51c6/src/runtime/proc.go#L2947)
+证明了 netpoller 的五个检查点：
+GC 恢复时
+GC 扫描时(gcDrain -> pollWork -> netpoll)
+系统监视器
+调度器在本地处理器全局队列中查找可用 goroutine 之后，窃取其它处理器队列之前
+未找到可用 goroutine 时 
+所以，netpoller 不是一个单独的线程处理，而是寄生在 *调度器，GC、系统监视器* 中
+*/
 func netpoll(delay int64) gList {
 	if epfd == -1 {
 		return gList{}
