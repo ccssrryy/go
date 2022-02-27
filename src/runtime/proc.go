@@ -1067,6 +1067,11 @@ func casGFromPreempted(gp *g, old, new uint32) bool {
 // This is also used by routines that do stack dumps. If the system is
 // in panic or being exited, this may not reliably stop all
 // goroutines.
+/* 
+标记当前 groutine 为 _Gwaiting状态
+暂停
+标记当前 groutine 为 _Grunning状态
+ */
 func stopTheWorld(reason string) {
 	semacquire(&worldsema)
 	gp := getg()
@@ -1172,10 +1177,13 @@ func stopTheWorldWithSema() {
 	lock(&sched.lock)
 	sched.stopwait = gomaxprocs
 	atomic.Store(&sched.gcwaiting, 1)
+	// 通过 preemptall-> preemptone发出抢占，抢占所有 P
 	preemptall()
+	// 将当前 P 设置为 _Pgcstop
 	// stop current P
 	_g_.m.p.ptr().status = _Pgcstop // Pgcstop is only diagnostic.
 	sched.stopwait--
+	// 把所有处于 _Psyscall 状态的 P 设置为 _Pgcstop
 	// try to retake all P's in Psyscall status
 	for _, p := range allp {
 		s := p.status
@@ -1188,6 +1196,7 @@ func stopTheWorldWithSema() {
 			sched.stopwait--
 		}
 	}
+	// 将所有 IDLE 的 P 的状态置为 _Pgcstop
 	// stop idle P's
 	for {
 		p := pidleget()
@@ -1201,6 +1210,8 @@ func stopTheWorldWithSema() {
 	unlock(&sched.lock)
 
 	// wait for remaining P's to stop voluntarily
+	// stopwait 计数仍大于 0，说明仍有 goroutine 未停止
+	// 通过循环等待重新抢占
 	if wait {
 		for {
 			// wait for 100us, then try to re-preempt in case of any races
@@ -1235,6 +1246,7 @@ func stopTheWorldWithSema() {
 		throw(bad)
 	}
 
+	// 设置全局变量 worldIsStopped 为 1，表示已处于停止状态
 	worldStopped()
 }
 
