@@ -323,6 +323,34 @@ func sigpipe() {
 }
 
 // doSigPreempt handles a preemption signal on gp.
+/* 
+处理基于信号的抢占
+如果 groutine 可被抢占，且处于抢占安全点
+那么在调整当前的程序计数器 PC，注入函数调用 asyncPreempt
+
+目前的抢占式调度也只会在垃圾回收扫描任务时触发，我们可以梳理一下上述代码实现的抢占式调度过程：
+
+1. 程序启动时，在 runtime.sighandler 中注册 SIGURG 信号的处理函数 runtime.[doSigPreempt](https://github.com/ccssrryy/go/blob/3768cb88d9ec8740b90aed60cfa2aa8c5436aed9/src/runtime/signal_unix.go#L331)；
+2. 在触发垃圾回收的栈扫描时会调用 runtime.suspendG 挂起 Goroutine，该函数会执行下面的逻辑：
+    1. 将 _Grunning 状态的 Goroutine 标记成可以被抢占，即将 preemptStop 设置成 true；
+    2. 调用 runtime.preemptM 触发抢占；
+3. runtime.preemptM 会调用 runtime.signalM 向线程发送信号 SIGURG；
+4. 操作系统会中断正在运行的线程并执行预先注册的信号处理函数 runtime.doSigPreempt；
+5. runtime.doSigPreempt 函数会处理抢占信号，获取当前的 SP 和 PC 寄存器并调用 runtime.sigctxt.pushCall；
+6. runtime.sigctxt.pushCall 会修改寄存器并在程序回到用户态时执行 runtime.asyncPreempt；
+7. 汇编指令 runtime.asyncPreempt 会调用运行时函数 runtime.asyncPreempt2；
+8. runtime.asyncPreempt2 会调用 runtime.preemptPark；
+9. runtime.preemptPark 会修改当前 Goroutine 的状态到 _Gpreempted 并调用runtime.schedule 让当前函数陷入休眠并让出线程，调度器会选择其它的 Goroutine 继续执行；
+
+上述 9 个步骤展示了基于信号的抢占式调度的执行过程。除了分析抢占的过程之外，我们还需要讨论一下抢占信号的选择，提案根据以下的四个原因选择 SIGURG 作为触发异步抢占的信号7：
+
+- 该信号需要被调试器透传；
+- 该信号不会被内部的 libc 库使用并拦截；
+- 该信号可以随意出现并且不触发任何后果；
+- 我们需要处理多个平台上的不同信号；
+
+STW 和栈扫描是一个可以抢占的安全点（Safe-points），所以 Go 语言会在这里先加入抢占功能
+ */
 func doSigPreempt(gp *g, ctxt *sigctxt) {
 	// Check if this G wants to be preempted and is safe to
 	// preempt.

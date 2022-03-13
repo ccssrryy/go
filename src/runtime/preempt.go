@@ -360,6 +360,7 @@ func wantAsyncPreempt(gp *g) bool {
 // In some cases the PC is safe for asynchronous preemption but it
 // also needs to adjust the resumption PC. The new PC is returned in
 // the second result.
+// 安全抢占点
 func isAsyncSafePoint(gp *g, pc, sp, lr uintptr) (bool, uintptr) {
 	mp := gp.m
 
