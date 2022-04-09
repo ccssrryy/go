@@ -3424,6 +3424,10 @@ top:
 		goto top
 	}
 
+	// 切换到其它 goroutine 运行
+	// 在其它 goroutine 中，调用 
+	// park_m, goschedImpl, preemptPark, goyield_m，goexit0，exitsyscall0 
+	// 会间接调用 schedule 重回调度
 	execute(gp, inheritTime)
 }
 
