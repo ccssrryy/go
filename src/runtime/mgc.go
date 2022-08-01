@@ -1163,6 +1163,11 @@ type gcBgMarkWorkerNode struct {
 	m muintptr
 }
 
+/**
+标记 Goroutine， gcDrain 用于标记，入队。
+在 STW 之前就新建了此 goroutine，
+但是会先主动挂起，直到 gcController.findRunnableGCWorker 时，才唤醒
+**/
 func gcBgMarkWorker() {
 	gp := getg()
 

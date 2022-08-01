@@ -53,6 +53,12 @@ const (
 // some miscellany) and initializes scanning-related state.
 //
 // The world must be stopped.
+/**
+界定、记录标记扫描范围，后面的标记扫描以此为依据
+记录了每个部分数据的起点，终点，和计数（每个计数在不同类型的内存中，大小不同）
+markroot 使用时，根据当前计数 i，
+反查其属于哪种类型，来做相应的类型标记。类似 number:type 的 map，同时 number 有计数的作用
+**/
 func gcMarkRootPrepare() {
 	assertWorldStopped()
 
@@ -977,6 +983,12 @@ const (
 // gcDrain will always return if there is a pending STW.
 //
 //go:nowritebarrier
+/**
+markroot() and grey(root) and gcw.put(root)
+while not gcw.empty():
+	o = gcw.tryGet()
+	scanobject(o) and grey(o.refers) and gcw.put(o.refers)
+**/
 func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 	if !writeBarrier.needed {
 		throw("gcDrain phase incorrect")

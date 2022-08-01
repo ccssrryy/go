@@ -559,6 +559,8 @@ func (sc spanClass) noscan() bool {
 // nosplit functions.
 //
 //go:nosplit
+// 根据地址 p 查找对应所属 arenas 的 arenaIdx
+// arenaBaseOffset 是基地址，如 amd64 中，只用了48位地址，高 16 位未使用，所以需要减去高 16 位
 func arenaIndex(p uintptr) arenaIdx {
 	return arenaIdx((p - arenaBaseOffset) / heapArenaBytes)
 }
@@ -627,6 +629,7 @@ func inHeapOrStack(b uintptr) bool {
 // Must be nosplit because it has callers that are nosplit.
 //
 //go:nosplit
+// 通过地址 p 查找对应的 mspan
 func spanOf(p uintptr) *mspan {
 	// This function looks big, but we use a lot of constant
 	// folding around arenaL1Bits to get it under the inlining
