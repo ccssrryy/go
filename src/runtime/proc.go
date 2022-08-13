@@ -2765,7 +2765,7 @@ top:
 	// not set lastpoll yet), this thread will do blocking netpoll below
 	// anyway.
 	/* 
-	查看本地队列和全局队列之后，窃取队列之前，立刻轮询网络
+	查看本地队列和全局队列之后无可用 g，准备窃取队列之前，立刻轮询网络
 	意味着，调度器的角度来看，本地队列和全局队列是优先于网络轮询的
 	 */
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {

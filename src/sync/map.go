@@ -36,6 +36,9 @@ type Map struct {
 	// Entries stored in read may be updated concurrently without mu, but updating
 	// a previously-expunged entry requires that the entry be copied to the dirty
 	// map and unexpunged with mu held.
+	// 只读的 map，用于快速查找，fast path
+	// 核心思想是分段锁，减少锁的粒度。一般的读，都是从 read 中读取，无锁的争用
+	// 只有写入，或者 read key miss 时，才会产生对 dirty 的争用
 	read atomic.Value // readOnly
 
 	// dirty contains the portion of the map's contents that require mu to be
@@ -48,6 +51,12 @@ type Map struct {
 	//
 	// If the dirty map is nil, the next write to the map will initialize it by
 	// making a shallow copy of the clean map, omitting stale entries.
+	// 所有的争用都发生在dirty,作为普通的 map，任何读写操作都上锁
+	// 每次 Load miss（in dirty not in read，每次写入新 key 再读时，就会出现这种情况） 时，
+	// 都会调用 m.missLocked()，将 dirty 刷到 read，并新建一个新的 dirty map
+	// 下次 Store 时，存储新 key，且是空 dirty 时，都会将 m 全部重新刷回 dirty
+	// 如此看来，每次 miss 的代价太大
+	// 所以，对于大 map，或者频繁写新 key 的情况，性能理论上会很差，甚至比 lock 更差（理论，未测试）
 	dirty map[interface{}]*entry
 
 	// misses counts the number of loads since the read map was last updated that
@@ -115,6 +124,7 @@ func (m *Map) Load(key interface{}) (value interface{}, ok bool) {
 			// Regardless of whether the entry was present, record a miss: this key
 			// will take the slow path until the dirty map is promoted to the read
 			// map.
+			// 每次 Load miss 都将 dirty 刷到 read
 			m.missLocked()
 		}
 		m.mu.Unlock()
@@ -155,6 +165,7 @@ func (m *Map) Store(key, value interface{}) {
 		if !read.amended {
 			// We're adding the first new key to the dirty map.
 			// Make sure it is allocated and mark the read-only map as incomplete.
+			// 每次存储新 key，且上次 load miss，都会重新将 read 刷回 dirty
 			m.dirtyLocked()
 			m.read.Store(readOnly{m: read.m, amended: true})
 		}
